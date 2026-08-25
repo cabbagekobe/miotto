@@ -1,0 +1,8 @@
+# Pinned tool/runtime versions (reproduced by jdx/mise-action in CI).
+# Tools that affect the lint bar are pinned exactly; latest is acceptable elsewhere.
+[tools]
+go = "1.27"
+lefthook = "latest"
+gitleaks = "latest"
+golangci-lint = "2.13.1"
+"go:golang.org/x/vuln/cmd/govulncheck" = "latest"  # a newer vulnerability DB is better, so latest

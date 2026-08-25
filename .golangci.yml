@@ -1,0 +1,8 @@
+# Enabled on top of the defaults (errcheck / govet / staticcheck / ineffassign / unused).
+# Statically checkable conventions live here, not in prompts.
+version: "2"
+linters:
+  enable:
+    - misspell
+    - gocritic
+    - revive

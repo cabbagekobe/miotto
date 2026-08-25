@@ -1,0 +1,23 @@
+# git guardrails for humans (protects manual commits that bypass Claude too).
+# Enable with: `lefthook install`  (install lefthook via mise or brew if missing)
+#
+# pre-commit runs only fast checks (seconds); heavy tests go to pre-push.
+# Everything goes through the single `make` entry point, so Claude and CI share the same bar.
+pre-commit:
+  parallel: true
+  commands:
+    gitleaks:
+      # Block committing secrets. Silently skipped where gitleaks is not installed.
+      # (`&& ... || true` would swallow a detection's non-zero exit too, hence the if.)
+      run: if command -v gitleaks >/dev/null 2>&1; then gitleaks protect --staged --redact --no-banner; fi
+    fmt-check:
+      run: make fmt-check
+    lint:
+      run: make lint
+    typecheck:
+      run: make typecheck
+
+pre-push:
+  commands:
+    test:
+      run: make test
