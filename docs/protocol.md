@@ -152,6 +152,18 @@ BAT voltage=6798, 8.215V, full(4) / BAT 1 temp=4033, 29.5 degree
 senA=0 senB=0 cover=1             ← paper sensors / cover
 ```
 
+Measured examples of `bat` subcommands (2026-08-26):
+
+```
+> bat soc
+soc: 95
+> bat charge
+chargeStatus: 1
+> bat data
+raw_adc: 6859.0,sliding_window_adc: 6857.8,filtered_adc: 6865.7,voltage: 4.154,
+soc: 95,status: 4,temp_raw_adc: 4070.0,temp_charge: 28.94,temp_not_charge: 25.00
+```
+
 ## JSON-RPC frame format (not yet determined at this point → resolved in the next chapter)
 
 Result of brute-forcing the format that follows `cmd json`:

@@ -13,7 +13,7 @@ and its spec sheet claims "Bluetooth 5.2 only" for connectivity — but
 | Protocol analysis | **Done**. The full procedure is recorded in [docs/protocol.md](docs/protocol.md) |
 | Printing on the device | **Working**. Output verified with the Go implementation alone (2026-08-25, `miotto print`) |
 | Library (Go) | **Done**. `protocol` / `session` / `imaging` (tested) + the USB layer `transport` (gousb, verified on the device) |
-| CLI | `print` only. `status` / `shell` not started |
+| CLI | `print` / `status` / `shell` implemented |
 | GUI | Not started |
 
 miotto is built as **a Go library that other applications import for printing**.
@@ -46,6 +46,9 @@ err = p.Print(ctx, photoBytes, miotto.WithProgress(func(pr miotto.Progress) {
 	// the job resumes automatically once paper is loaded.
 }))
 ```
+
+`Printer` also exposes `Status()` (battery level and cover state) and
+`Shell(cmd)` (raw access to the firmware's debug shell).
 
 Applications that bring their own I/O (a custom transport, an async runtime,
 etc.) can use the sans-I/O lower layers directly: the

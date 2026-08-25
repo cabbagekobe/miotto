@@ -13,7 +13,8 @@
 // Print progress (chunk transfer and job_state) is delivered via
 // [WithProgress]. Running out of paper is reported as
 // [session.JobStatePending]; the job resumes automatically once paper is
-// loaded.
+// loaded. [Printer.Status] reads the battery level and cover state, and
+// [Printer.Shell] gives raw access to the firmware's debug shell.
 //
 // The lower layers are exported too, for applications that bring their own I/O:
 //

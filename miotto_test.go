@@ -264,6 +264,95 @@ func TestPrintTerminatesOnEndlessStream(t *testing.T) {
 	}
 }
 
+func TestShellSendsCommandAndReturnsReply(t *testing.T) {
+	dev := &fakeDevice{responses: [][]byte{[]byte("BAT voltage=6864, 8.295V, full(4)\nOK\n")}}
+	p := miotto.NewPrinter(dev)
+	out, err := p.Shell("bat")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []byte("bat\n"); !bytes.Equal(dev.writes[0], want) {
+		t.Errorf("wrote %q, want %q", dev.writes[0], want)
+	}
+	if !bytes.Contains(out, []byte("voltage=6864")) {
+		t.Errorf("reply not returned: %q", out)
+	}
+}
+
+func TestShellPropagatesWriteError(t *testing.T) {
+	dev := &fakeDevice{writeErr: errors.New("usb gone")}
+	p := miotto.NewPrinter(dev)
+	if _, err := p.Shell("apd"); err == nil {
+		t.Fatal("want error when write fails")
+	}
+}
+
+func TestShellReturnsEmptyOnSilentDevice(t *testing.T) {
+	// No reply is not an error (some commands answer on UART only).
+	dev := &fakeDevice{}
+	p := miotto.NewPrinter(dev)
+	out, err := p.Shell("bd display_all")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(out) != 0 {
+		t.Errorf("out = %q, want empty", out)
+	}
+}
+
+func TestStatusReadsBatteryAndCover(t *testing.T) {
+	dev := &fakeDevice{responses: [][]byte{
+		[]byte("PSEN_A adc=3.143V=7802\nsenA=0 senB=0 cover=1\nOK\n"), // apd
+		[]byte("soc: 80\n"), // bat soc (real format captured on the device: "soc: 95")
+	}}
+	p := miotto.NewPrinter(dev)
+	status, err := p.Status()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status.BatteryPercent != 80 {
+		t.Errorf("BatteryPercent = %d, want 80", status.BatteryPercent)
+	}
+	if status.CoverOpen {
+		t.Error("CoverOpen = true, want false")
+	}
+}
+
+func TestStatusReportsOpenCover(t *testing.T) {
+	dev := &fakeDevice{responses: [][]byte{
+		[]byte("senA=0 senB=0 cover=0\nOK\n"),
+		[]byte("soc: 80\n"),
+	}}
+	p := miotto.NewPrinter(dev)
+	status, err := p.Status()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !status.CoverOpen {
+		t.Error("CoverOpen = false, want true")
+	}
+}
+
+func TestStatusFailsWhenSensorsUnreadable(t *testing.T) {
+	// Unlike the print preflight (fail-open), status must report the truth.
+	dev := &fakeDevice{readErr: errors.New("timeout")}
+	p := miotto.NewPrinter(dev)
+	if _, err := p.Status(); err == nil {
+		t.Fatal("want error when apd is unreadable")
+	}
+}
+
+func TestStatusFailsOnUnparsableBattery(t *testing.T) {
+	dev := &fakeDevice{responses: [][]byte{
+		[]byte("senA=0 senB=0 cover=1\nOK\n"),
+		[]byte("ER\n"),
+	}}
+	p := miotto.NewPrinter(dev)
+	if _, err := p.Status(); err == nil {
+		t.Fatal("want error for unparsable battery reply")
+	}
+}
+
 func TestCloseClosesDevice(t *testing.T) {
 	dev := &fakeDevice{}
 	p := miotto.NewPrinter(dev)

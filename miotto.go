@@ -5,6 +5,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"regexp"
+	"strconv"
 	"time"
 
 	"github.com/cabbagekobe/miotto/imaging"
@@ -168,12 +170,21 @@ func (p *Printer) Print(ctx context.Context, imageData []byte, opts ...PrintOpti
 	return nil
 }
 
-// checkCover asks the debug shell (apd) whether the cover is open before
-// printing. When the reply is unreadable or carries no cover= field, printing
-// proceeds (fail-open).
-func (p *Printer) checkCover() error {
-	if err := p.dev.Write([]byte("apd\n")); err != nil {
-		return nil
+// Shell sends one command to the firmware's debug shell and returns the raw
+// reply (empty when the device stays silent — some commands answer on UART
+// only). See docs/protocol.md for the known commands.
+//
+// Warning: producttest, i2c, and otp have unpredictable side effects and
+// should never be sent.
+func (p *Printer) Shell(command string) ([]byte, error) {
+	return p.shellExec(command)
+}
+
+// shellExec sends a debug-shell command and reads the reply with the bounded
+// pattern shared by Shell, Status, and checkCover.
+func (p *Printer) shellExec(command string) ([]byte, error) {
+	if err := p.dev.Write([]byte(command + "\n")); err != nil {
+		return nil, err
 	}
 	var out []byte
 	wait := 2 * time.Second // wait for the first reply, then drain the rest
@@ -184,6 +195,66 @@ func (p *Printer) checkCover() error {
 		}
 		out = append(out, b...)
 		wait = 400 * time.Millisecond
+	}
+	return out, nil
+}
+
+// Status is a snapshot of the printer's state, read via the debug shell
+// (apd and bat; the JSON-RPC get_prop vocabulary is unknown, see
+// docs/protocol.md).
+type Status struct {
+	BatteryPercent int
+	CoverOpen      bool
+}
+
+// Status reads the printer's battery level and cover state. Unlike the
+// preflight check in Print (which fails open), Status returns an error when
+// the sensors cannot be read.
+func (p *Printer) Status() (Status, error) {
+	p.drain()
+	apd, err := p.shellExec("apd")
+	if err != nil {
+		return Status{}, fmt.Errorf("usb write: %w", err)
+	}
+	if !bytes.Contains(apd, []byte("cover=")) {
+		return Status{}, fmt.Errorf("cannot read sensors (apd): %q", apd)
+	}
+	soc, err := p.shellExec("bat soc")
+	if err != nil {
+		return Status{}, fmt.Errorf("usb write: %w", err)
+	}
+	percent, err := parseBatteryPercent(soc)
+	if err != nil {
+		return Status{}, err
+	}
+	return Status{
+		BatteryPercent: percent,
+		CoverOpen:      bytes.Contains(apd, []byte("cover=0")),
+	}, nil
+}
+
+var batteryNumber = regexp.MustCompile(`\d+`)
+
+// parseBatteryPercent extracts the percentage from a `bat soc` reply.
+func parseBatteryPercent(reply []byte) (int, error) {
+	m := batteryNumber.Find(reply)
+	if m == nil {
+		return 0, fmt.Errorf("cannot parse battery level: %q", reply)
+	}
+	n, err := strconv.Atoi(string(m))
+	if err != nil || n > 100 {
+		return 0, fmt.Errorf("battery level out of range: %q", reply)
+	}
+	return n, nil
+}
+
+// checkCover asks the debug shell (apd) whether the cover is open before
+// printing. When the reply is unreadable or carries no cover= field, printing
+// proceeds (fail-open).
+func (p *Printer) checkCover() error {
+	out, err := p.shellExec("apd")
+	if err != nil {
+		return nil
 	}
 	if bytes.Contains(out, []byte("cover=0")) {
 		return ErrCoverOpen

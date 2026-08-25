@@ -1,13 +1,19 @@
-// miotto is the CLI that drives the printer over USB. Only print for now.
+// miotto is the CLI that drives the printer over USB.
 //
-//	miotto print <image-file>
+//	miotto print <image-file>   print one photo
+//	miotto status               show battery and cover state
+//	miotto shell [command]      run a debug-shell command (REPL without args)
 package main
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
+	"slices"
+	"strings"
 
 	miotto "github.com/cabbagekobe/miotto"
 	"github.com/cabbagekobe/miotto/session"
@@ -18,11 +24,19 @@ import (
 const pendingLimit = 150
 
 func main() {
-	if len(os.Args) != 3 || os.Args[1] != "print" {
-		fmt.Fprintln(os.Stderr, "usage: miotto print <image-file>")
+	var err error
+	switch {
+	case len(os.Args) == 3 && os.Args[1] == "print":
+		err = printFile(os.Args[2])
+	case len(os.Args) == 2 && os.Args[1] == "status":
+		err = showStatus()
+	case len(os.Args) >= 2 && os.Args[1] == "shell":
+		err = shellCmd(os.Args[2:])
+	default:
+		fmt.Fprintln(os.Stderr, "usage: miotto print <image-file> | status | shell [command]")
 		os.Exit(2)
 	}
-	if err := printFile(os.Args[2]); err != nil {
+	if err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)
 	}
@@ -60,6 +74,89 @@ func printFile(path string) error {
 	}
 	fmt.Println("Print finished (job_state: finished)")
 	return nil
+}
+
+func showStatus() error {
+	p, err := miotto.Open()
+	if err != nil {
+		return err
+	}
+	defer p.Close()
+
+	status, err := p.Status()
+	if err != nil {
+		return err
+	}
+	fmt.Print(formatStatus(status))
+	return nil
+}
+
+func formatStatus(s miotto.Status) string {
+	cover := "closed"
+	if s.CoverOpen {
+		cover = "open"
+	}
+	return fmt.Sprintf("battery: %d%%\ncover:   %s\n", s.BatteryPercent, cover)
+}
+
+// blockedCommands have unpredictable side effects (see docs/protocol.md) and
+// are never sent.
+var blockedCommands = []string{"producttest", "i2c", "otp"}
+
+func isBlocked(command string) bool {
+	fields := strings.Fields(command)
+	return len(fields) > 0 && slices.Contains(blockedCommands, fields[0])
+}
+
+func shellCmd(args []string) error {
+	p, err := miotto.Open()
+	if err != nil {
+		return err
+	}
+	defer p.Close()
+
+	if len(args) > 0 {
+		return runShellCommand(p, strings.Join(args, " "), os.Stdout)
+	}
+
+	fmt.Println("miotto debug shell — type a command, `exit` or Ctrl-D to quit")
+	scanner := bufio.NewScanner(os.Stdin)
+	for {
+		fmt.Print("> ")
+		if !scanner.Scan() {
+			fmt.Println()
+			break
+		}
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
+			continue
+		}
+		if line == "exit" {
+			break
+		}
+		if err := runShellCommand(p, line, os.Stdout); err != nil {
+			return err
+		}
+	}
+	return scanner.Err()
+}
+
+func runShellCommand(p *miotto.Printer, command string, w io.Writer) error {
+	if isBlocked(command) {
+		_, err := fmt.Fprintf(w, "refusing %q: unpredictable side effects (see docs/protocol.md)\n",
+			strings.Fields(command)[0])
+		return err
+	}
+	out, err := p.Shell(command)
+	if err != nil {
+		return err
+	}
+	if len(out) == 0 {
+		_, err := fmt.Fprintln(w, "(no response)")
+		return err
+	}
+	_, err = w.Write(out)
+	return err
 }
 
 func show(pr miotto.Progress) {

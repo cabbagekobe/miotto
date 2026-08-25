@@ -101,9 +101,11 @@ cmd/         CLI (print is a thin wrapper over the root API; status / shell not 
    the full area assuming borderless printing~~
    **Done (2026-08-25, ported to Go)**. EXIF orientation (smartphone photos,
    all 8 ways) is applied too
-5. **`cmd/miotto`** — `print` / `status` / `shell` (interactive access to the
-   debug shell). **`print` is done (2026-08-25)**; the print loop is tested
-   with a fake device. status / shell not started
+5. ~~**`cmd/miotto`** — `print` / `status` / `shell` (interactive access to the
+   debug shell)~~ **Done (print 2026-08-25; status / shell 2026-08-26)**.
+   `status` reads battery and cover via the library's `Printer.Status`
+   (debug shell `bat soc` + `apd`); `shell` offers one-shot and REPL modes
+   and refuses `producttest` / `i2c` / `otp`. All verified on the device
 6. ~~**Acceptance test on the device** — print one sheet with
    `miotto print testdata/testchart.jpg`~~
    **Done (2026-08-25)**. 105,306 bytes transferred in 11 chunks, reaching
