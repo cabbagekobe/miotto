@@ -19,7 +19,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - run: sudo apt-get update && sudo apt-get install -y libusb-1.0-0-dev  # needed to build transport (gousb/cgo)
-      - uses: jdx/mise-action@v3   # reproduce all tools from mise.toml
+      - uses: jdx/mise-action@v5   # reproduce all tools from mise.toml
       - run: make check
 
   audit:
@@ -29,7 +29,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - run: sudo apt-get update && sudo apt-get install -y libusb-1.0-0-dev  # needed to analyze transport (gousb/cgo)
-      - uses: jdx/mise-action@v3
+      - uses: jdx/mise-action@v5
       - run: make audit
 
   secrets:
